@@ -77,7 +77,7 @@ function PaymentsAdmin() {
     const { data: updated, error } = await supabase.from("payments").update({
       status, admin_note: note ?? null, reviewed_at: new Date().toISOString(),
     }).eq("id", id).select().maybeSingle();
-    if (error) return toast.error(error.message);
+    if (error) { toast.error(error.message); return; }
 
     if (status === "approved" && updated) {
       const periodEnd = new Date();
