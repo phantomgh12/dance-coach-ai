@@ -73,7 +73,7 @@ function PaymentsAdmin() {
     },
   });
 
-  const decide = async (id: string, status: "approved" | "rejected", plan: string, userId: string, note?: string) => {
+  const decide = async (id: string, status: "approved" | "rejected", plan: string, userId: string, note?: string): Promise<void> => {
     const { data: updated, error } = await supabase.from("payments").update({
       status, admin_note: note ?? null, reviewed_at: new Date().toISOString(),
     }).eq("id", id).select().maybeSingle();
