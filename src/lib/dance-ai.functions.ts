@@ -96,7 +96,7 @@ export const analyzeDance = createServerFn({ method: "POST" })
 
       return { ok: true, analysis: output };
     } catch (error) {
-      const fallback = NoObjectGeneratedError.isInstance(error) ? error.text : null;
+      const fallback = NoObjectGeneratedError.isInstance(error) ? (error as { text?: string }).text ?? null : null;
       await supabase.from("videos").update({
         status: "failed",
         analysis: fallback ? { raw: fallback } : null,
