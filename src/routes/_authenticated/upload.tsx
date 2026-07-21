@@ -57,7 +57,7 @@ function UploadPage() {
       if (upErr) throw upErr;
       setProgress(95);
 
-      const { error: dbErr } = await supabase.from("videos").insert({
+      const { data: inserted, error: dbErr } = await supabase.from("videos").insert({
         user_id: user.id,
         title: t,
         file_path: path,
@@ -65,16 +65,16 @@ function UploadPage() {
         mime_type: file.type,
         type: "source",
         status: "uploaded",
-      });
-      if (dbErr) throw dbErr;
+      }).select("id").single();
+      if (dbErr || !inserted) throw dbErr;
 
       await supabase.from("notifications").insert({
-        user_id: user.id, title: "Upload complete", body: `${t} is ready for analysis.`,
+        user_id: user.id, title: "Upload complete", body: `${t} is ready for AI analysis.`,
       });
 
       setProgress(100);
       toast.success("Video uploaded");
-      navigate({ to: "/dashboard" });
+      navigate({ to: "/video/$id", params: { id: inserted.id } });
     } catch (e: any) {
       toast.error(e.message ?? "Upload failed");
     } finally {

@@ -1,0 +1,1 @@
+ALTER TABLE public.videos ADD COLUMN IF NOT EXISTS analysis jsonb; ALTER TABLE public.videos ADD COLUMN IF NOT EXISTS feedback jsonb;

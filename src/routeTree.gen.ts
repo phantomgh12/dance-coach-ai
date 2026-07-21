@@ -20,6 +20,7 @@ import { Route as AuthenticatedPlansRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedHistoryRouteImport } from './routes/_authenticated/history'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
+import { Route as AuthenticatedVideoIdRouteImport } from './routes/_authenticated/video.$id'
 import { Route as AuthenticatedPaymentPlanRouteImport } from './routes/_authenticated/payment.$plan'
 
 const TermsRoute = TermsRouteImport.update({
@@ -76,6 +77,11 @@ const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
   path: '/admin',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedVideoIdRoute = AuthenticatedVideoIdRouteImport.update({
+  id: '/video/$id',
+  path: '/video/$id',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedPaymentPlanRoute =
   AuthenticatedPaymentPlanRouteImport.update({
     id: '/payment/$plan',
@@ -95,6 +101,7 @@ export interface FileRoutesByFullPath {
   '/plans': typeof AuthenticatedPlansRoute
   '/upload': typeof AuthenticatedUploadRoute
   '/payment/$plan': typeof AuthenticatedPaymentPlanRoute
+  '/video/$id': typeof AuthenticatedVideoIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -108,6 +115,7 @@ export interface FileRoutesByTo {
   '/plans': typeof AuthenticatedPlansRoute
   '/upload': typeof AuthenticatedUploadRoute
   '/payment/$plan': typeof AuthenticatedPaymentPlanRoute
+  '/video/$id': typeof AuthenticatedVideoIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -123,6 +131,7 @@ export interface FileRoutesById {
   '/_authenticated/plans': typeof AuthenticatedPlansRoute
   '/_authenticated/upload': typeof AuthenticatedUploadRoute
   '/_authenticated/payment/$plan': typeof AuthenticatedPaymentPlanRoute
+  '/_authenticated/video/$id': typeof AuthenticatedVideoIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -138,6 +147,7 @@ export interface FileRouteTypes {
     | '/plans'
     | '/upload'
     | '/payment/$plan'
+    | '/video/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -151,6 +161,7 @@ export interface FileRouteTypes {
     | '/plans'
     | '/upload'
     | '/payment/$plan'
+    | '/video/$id'
   id:
     | '__root__'
     | '/'
@@ -165,6 +176,7 @@ export interface FileRouteTypes {
     | '/_authenticated/plans'
     | '/_authenticated/upload'
     | '/_authenticated/payment/$plan'
+    | '/_authenticated/video/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -255,6 +267,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/video/$id': {
+      id: '/_authenticated/video/$id'
+      path: '/video/$id'
+      fullPath: '/video/$id'
+      preLoaderRoute: typeof AuthenticatedVideoIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/payment/$plan': {
       id: '/_authenticated/payment/$plan'
       path: '/payment/$plan'
@@ -272,6 +291,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedPlansRoute: typeof AuthenticatedPlansRoute
   AuthenticatedUploadRoute: typeof AuthenticatedUploadRoute
   AuthenticatedPaymentPlanRoute: typeof AuthenticatedPaymentPlanRoute
+  AuthenticatedVideoIdRoute: typeof AuthenticatedVideoIdRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -281,6 +301,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedPlansRoute: AuthenticatedPlansRoute,
   AuthenticatedUploadRoute: AuthenticatedUploadRoute,
   AuthenticatedPaymentPlanRoute: AuthenticatedPaymentPlanRoute,
+  AuthenticatedVideoIdRoute: AuthenticatedVideoIdRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
