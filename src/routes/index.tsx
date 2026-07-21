@@ -74,7 +74,11 @@ function Landing() {
       </section>
 
       <footer className="border-t border-border/50 px-5 py-6 text-center text-xs text-muted-foreground">
-        © {new Date().getFullYear()} DanceAI
+        <div className="flex flex-wrap items-center justify-center gap-4">
+          <span>© {new Date().getFullYear()} DanceAI</span>
+          <Link to="/terms" className="hover:text-foreground">Terms</Link>
+          <Link to="/privacy" className="hover:text-foreground">Privacy</Link>
+        </div>
       </footer>
     </div>
   );
