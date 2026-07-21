@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,13 +38,7 @@ function AuthPage() {
           <h1 className="font-display text-2xl font-bold">Welcome</h1>
           <p className="mt-1 text-sm text-muted-foreground">Sign in to keep learning.</p>
 
-          <GoogleButton />
-
-          <div className="my-5 flex items-center gap-3 text-xs text-muted-foreground">
-            <div className="h-px flex-1 bg-border" />or<div className="h-px flex-1 bg-border" />
-          </div>
-
-          <Tabs defaultValue="signin" className="w-full">
+          <Tabs defaultValue="signin" className="mt-5 w-full">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="signin">Sign in</TabsTrigger>
               <TabsTrigger value="signup">Sign up</TabsTrigger>
