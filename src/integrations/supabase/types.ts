@@ -169,7 +169,9 @@ export type Database = {
       }
       videos: {
         Row: {
+          analysis: Json | null
           created_at: string
+          feedback: Json | null
           file_path: string
           file_size: number | null
           id: string
@@ -183,7 +185,9 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          analysis?: Json | null
           created_at?: string
+          feedback?: Json | null
           file_path: string
           file_size?: number | null
           id?: string
@@ -197,7 +201,9 @@ export type Database = {
           user_id: string
         }
         Update: {
+          analysis?: Json | null
           created_at?: string
+          feedback?: Json | null
           file_path?: string
           file_size?: number | null
           id?: string
