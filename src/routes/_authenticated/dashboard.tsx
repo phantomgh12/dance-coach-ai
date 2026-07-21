@@ -108,7 +108,7 @@ function Dashboard() {
         {videos && videos.length > 0 ? (
           <div className="grid gap-2">
             {videos.slice(0, 5).map((v) => (
-              <div key={v.id} className="glass flex items-center justify-between rounded-xl px-4 py-3">
+              <Link key={v.id} to="/video/$id" params={{ id: v.id }} className="glass flex items-center justify-between rounded-xl px-4 py-3 hover:bg-white/5 transition-colors">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{v.title}</p>
                   <p className="text-xs text-muted-foreground">
@@ -116,7 +116,7 @@ function Dashboard() {
                   </p>
                 </div>
                 {v.score != null && <Badge variant="secondary">{Math.round(Number(v.score))}/100</Badge>}
-              </div>
+              </Link>
             ))}
           </div>
         ) : (

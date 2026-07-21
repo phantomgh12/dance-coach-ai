@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -34,7 +34,7 @@ function History() {
       ) : videos && videos.length > 0 ? (
         <div className="grid gap-2">
           {videos.map((v) => (
-            <div key={v.id} className="glass flex items-center gap-3 rounded-xl px-4 py-3">
+            <Link key={v.id} to="/video/$id" params={{ id: v.id }} className="glass flex items-center gap-3 rounded-xl px-4 py-3 hover:bg-white/5 transition-colors">
               <Film className="h-4 w-4 shrink-0 text-primary" />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">{v.title}</p>
@@ -44,7 +44,7 @@ function History() {
               </div>
               <Badge variant="secondary" className="capitalize">{v.status}</Badge>
               {v.score != null && <Badge>{Math.round(Number(v.score))}/100</Badge>}
-            </div>
+            </Link>
           ))}
         </div>
       ) : (
