@@ -45,6 +45,8 @@ const EvaluationSchema = z.object({
   summary: z.string(),
 });
 
+const AI_COST = 10;
+
 function toImageParts(frames: string[]) {
   return frames.map((url) => ({ type: "image" as const, image: url }));
 }
@@ -52,8 +54,22 @@ function toImageParts(frames: string[]) {
 function getModel() {
   const key = process.env.LOVABLE_API_KEY;
   if (!key) throw new Error("Missing LOVABLE_API_KEY");
-  const gateway = createLovableAiGatewayProvider(key);
-  return gateway("google/gemini-2.5-flash");
+  const gateway = createLovableAiGatewayProvider(key, { structuredOutputs: true });
+  return gateway("openai/gpt-5.5");
+}
+
+function humanizeError(error: unknown): Error {
+  if (error instanceof Error) {
+    const msg = error.message ?? "";
+    if (msg.includes("429") || msg.toLowerCase().includes("rate")) {
+      return new Error("AI is busy right now. Try again in a moment.");
+    }
+    if (msg.includes("402") || msg.toLowerCase().includes("credit")) {
+      return new Error("AI credits exhausted. Please upgrade or wait for the next reset.");
+    }
+    return error;
+  }
+  return new Error("Something went wrong");
 }
 
 export const analyzeDance = createServerFn({ method: "POST" })
@@ -66,6 +82,13 @@ export const analyzeDance = createServerFn({ method: "POST" })
       .from("videos").select("*").eq("id", data.videoId).eq("user_id", userId).maybeSingle();
     if (vErr || !video) throw new Error("Video not found");
 
+    // Consume credits BEFORE processing so users can't spam
+    const { error: cErr } = await supabase.rpc("consume_credits", {
+      _user_id: userId,
+      _amount: AI_COST,
+    });
+    if (cErr) throw new Error(cErr.message);
+
     await supabase.from("videos").update({ status: "processing" }).eq("id", video.id);
 
     const model = getModel();
@@ -77,7 +100,7 @@ export const analyzeDance = createServerFn({ method: "POST" })
           {
             role: "system",
             content:
-              "You are an expert dance coach. Analyze the frames from a dance video and produce a structured beginner-friendly lesson breakdown. Be concise, energetic and specific. Steps should be sequential moves you can see across the frames.",
+              "You are an expert dance coach. Analyze the frames from a dance video and produce a structured beginner-friendly lesson breakdown. Be concise, energetic and specific. Steps should be sequential moves you can see across the frames. Return valid JSON only.",
           },
           {
             role: "user",
@@ -101,7 +124,7 @@ export const analyzeDance = createServerFn({ method: "POST" })
         status: "failed",
         analysis: fallback ? { raw: fallback } : null,
       }).eq("id", video.id);
-      throw error instanceof Error ? error : new Error("Analysis failed");
+      throw humanizeError(error);
     }
   });
 
@@ -117,6 +140,12 @@ export const evaluateDance = createServerFn({ method: "POST" })
       .eq("id", data.referenceVideoId).eq("user_id", userId).maybeSingle();
     if (!practice || !reference) throw new Error("Videos not found");
 
+    const { error: cErr } = await supabase.rpc("consume_credits", {
+      _user_id: userId,
+      _amount: AI_COST,
+    });
+    if (cErr) throw new Error(cErr.message);
+
     await supabase.from("videos").update({ status: "processing" }).eq("id", practice.id);
 
     const model = getModel();
@@ -128,7 +157,7 @@ export const evaluateDance = createServerFn({ method: "POST" })
           {
             role: "system",
             content:
-              "You are a strict but encouraging dance judge. Compare the student's practice against the reference dance. Score each dimension from 0 to 100 (overall is the weighted average). Be specific about what matched and what to fix. Keep feedback concise and actionable.",
+              "You are a strict but encouraging dance judge. Compare the student's practice against the reference dance. Score each dimension from 0 to 100 (overall is the weighted average). Be specific about what matched and what to fix. Keep feedback concise and actionable. Return valid JSON only.",
           },
           {
             role: "user",
@@ -153,6 +182,6 @@ export const evaluateDance = createServerFn({ method: "POST" })
       return { ok: true, evaluation: output };
     } catch (error) {
       await supabase.from("videos").update({ status: "failed" }).eq("id", practice.id);
-      throw error instanceof Error ? error : new Error("Evaluation failed");
+      throw humanizeError(error);
     }
   });

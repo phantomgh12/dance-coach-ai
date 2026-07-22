@@ -96,6 +96,8 @@ export type Database = {
         Row: {
           avatar_url: string | null
           created_at: string
+          credits: number
+          credits_reset_on: string
           display_name: string | null
           id: string
           updated_at: string
@@ -103,6 +105,8 @@ export type Database = {
         Insert: {
           avatar_url?: string | null
           created_at?: string
+          credits?: number
+          credits_reset_on?: string
           display_name?: string | null
           id: string
           updated_at?: string
@@ -110,6 +114,8 @@ export type Database = {
         Update: {
           avatar_url?: string | null
           created_at?: string
+          credits?: number
+          credits_reset_on?: string
           display_name?: string | null
           id?: string
           updated_at?: string
@@ -231,6 +237,11 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      consume_credits: {
+        Args: { _amount: number; _user_id: string }
+        Returns: number
+      }
+      daily_credit_allowance: { Args: { _user_id: string }; Returns: number }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -242,7 +253,14 @@ export type Database = {
     Enums: {
       app_role: "admin" | "user"
       payment_status: "pending" | "approved" | "rejected"
-      subscription_plan: "free" | "pro" | "premium"
+      subscription_plan:
+        | "free"
+        | "pro"
+        | "premium"
+        | "starter"
+        | "elite"
+        | "studio"
+        | "enterprise"
       subscription_status: "active" | "inactive" | "expired"
       video_status: "uploaded" | "processing" | "analyzed" | "failed"
       video_type: "source" | "practice"
@@ -375,7 +393,15 @@ export const Constants = {
     Enums: {
       app_role: ["admin", "user"],
       payment_status: ["pending", "approved", "rejected"],
-      subscription_plan: ["free", "pro", "premium"],
+      subscription_plan: [
+        "free",
+        "pro",
+        "premium",
+        "starter",
+        "elite",
+        "studio",
+        "enterprise",
+      ],
       subscription_status: ["active", "inactive", "expired"],
       video_status: ["uploaded", "processing", "analyzed", "failed"],
       video_type: ["source", "practice"],

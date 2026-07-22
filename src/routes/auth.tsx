@@ -97,6 +97,7 @@ function SignUpForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+  const navigate = useNavigate();
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -115,9 +116,19 @@ function SignUpForm() {
         data: { display_name: nm.data },
       },
     });
+    if (error) {
+      setBusy(false);
+      return toast.error(error.message);
+    }
+    // Auto sign-in immediately (email confirmation is disabled)
+    const { error: signInErr } = await supabase.auth.signInWithPassword({
+      email: em.data,
+      password: pw.data,
+    });
     setBusy(false);
-    if (error) return toast.error(error.message);
-    toast.success("Account created! Check your email if confirmation is required.");
+    if (signInErr) return toast.error(signInErr.message);
+    toast.success("Welcome to DanceAI!");
+    navigate({ to: "/dashboard", replace: true });
   };
 
   return (
