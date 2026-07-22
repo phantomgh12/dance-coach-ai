@@ -242,7 +242,14 @@ export type Database = {
     Enums: {
       app_role: "admin" | "user"
       payment_status: "pending" | "approved" | "rejected"
-      subscription_plan: "free" | "pro" | "premium"
+      subscription_plan:
+        | "free"
+        | "pro"
+        | "premium"
+        | "starter"
+        | "elite"
+        | "studio"
+        | "enterprise"
       subscription_status: "active" | "inactive" | "expired"
       video_status: "uploaded" | "processing" | "analyzed" | "failed"
       video_type: "source" | "practice"
@@ -375,7 +382,15 @@ export const Constants = {
     Enums: {
       app_role: ["admin", "user"],
       payment_status: ["pending", "approved", "rejected"],
-      subscription_plan: ["free", "pro", "premium"],
+      subscription_plan: [
+        "free",
+        "pro",
+        "premium",
+        "starter",
+        "elite",
+        "studio",
+        "enterprise",
+      ],
       subscription_status: ["active", "inactive", "expired"],
       video_status: ["uploaded", "processing", "analyzed", "failed"],
       video_type: ["source", "practice"],
