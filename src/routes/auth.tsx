@@ -97,6 +97,7 @@ function SignUpForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+  const navigate = useNavigate();
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
