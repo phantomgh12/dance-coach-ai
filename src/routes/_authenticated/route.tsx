@@ -65,12 +65,13 @@ function AuthenticatedLayout() {
             )}
           </nav>
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="ghost" onClick={signOut}>
+            <CreditsBadge />
+            <Button size="sm" variant="ghost" onClick={signOut} title="Sign out">
               <LogOut className="h-4 w-4" />
               <span className="sr-only">Sign out</span>
             </Button>
-            <Button size="sm" variant="outline" className="md:hidden" onClick={() => setMobileOpen((v) => !v)}>
-              <Sparkles className="h-4 w-4" />
+            <Button size="sm" variant="outline" className="md:hidden" onClick={() => setMobileOpen((v) => !v)} aria-label="Toggle menu">
+              <Menu className="h-4 w-4" />
             </Button>
           </div>
         </div>
