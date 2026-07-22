@@ -3,10 +3,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import {
-  LayoutDashboard, Upload as UploadIcon, Crown, History, Shield, LogOut, Sparkles,
+  LayoutDashboard, Upload as UploadIcon, Crown, History, Shield, LogOut, Menu,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { CreditsBadge } from "@/components/credits-badge";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
