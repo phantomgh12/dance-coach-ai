@@ -229,13 +229,59 @@ type Evaluation = {
   strengths: string[]; improvements: string[]; summary: string;
 };
 
+function AiProgress({ steps }: { steps: AiStep[] }) {
+  const done = steps.filter((s) => s.state === "done").length;
+  const total = Math.max(steps.length, 4);
+  return (
+    <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <p className="flex items-center gap-2 text-sm font-medium">
+          <Brain className="h-4 w-4 animate-pulse text-primary" /> AI is working…
+        </p>
+        <span className="text-xs text-muted-foreground">{done}/{total}</span>
+      </div>
+      <Progress value={(done / total) * 100} className="mb-3 h-1.5" />
+      <ol className="space-y-1.5 text-sm">
+        {steps.map((s) => {
+          const Icon = s.key === "frames" ? Scissors : s.key === "upload" ? UploadCloud : s.key === "model" ? ScanLine : CheckCircle2;
+          return (
+            <li key={s.key} className="flex items-center gap-2">
+              {s.state === "active" ? <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" /> :
+                s.state === "done" ? <CheckCircle2 className="h-3.5 w-3.5 text-primary" /> :
+                <Icon className="h-3.5 w-3.5 text-destructive" />}
+              <span className={s.state === "error" ? "text-destructive" : s.state === "done" ? "text-foreground" : "text-muted-foreground"}>
+                {s.label}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
+
 function AnalysisView({ a }: { a: Analysis }) {
+  const copyLesson = () => {
+    const text = `${a.style} — ${a.difficulty} · ${a.tempo}\n\n${a.summary}\n\nSteps:\n${a.steps.map((s, i) => `${i + 1}. ${s.name} — ${s.description} (Tip: ${s.tip})`).join("\n")}\n\nKey moves: ${a.keyMoves.join(", ")}\n\nTips: ${a.practiceTips.join(" · ")}`;
+    navigator.clipboard.writeText(text);
+    toast.success("Lesson copied to clipboard");
+  };
+  const share = async () => {
+    try {
+      if (navigator.share) await navigator.share({ title: "DanceAI lesson", text: a.summary, url: window.location.href });
+      else { await navigator.clipboard.writeText(window.location.href); toast.success("Link copied"); }
+    } catch {}
+  };
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
-        <Badge variant="secondary">Style: {a.style}</Badge>
-        <Badge variant="secondary" className="capitalize">Level: {a.difficulty}</Badge>
-        <Badge variant="secondary">Tempo: {a.tempo}</Badge>
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant="secondary"><Music2 className="mr-1 h-3 w-3" />{a.style}</Badge>
+        <Badge variant="secondary" className="capitalize"><Flame className="mr-1 h-3 w-3" />{a.difficulty}</Badge>
+        <Badge variant="secondary"><Gauge className="mr-1 h-3 w-3" />{a.tempo}</Badge>
+        <div className="ml-auto flex gap-1">
+          <Button size="sm" variant="ghost" onClick={copyLesson}><Copy className="h-3.5 w-3.5" /></Button>
+          <Button size="sm" variant="ghost" onClick={share}><Share2 className="h-3.5 w-3.5" /></Button>
+        </div>
       </div>
       <p className="text-sm">{a.summary}</p>
 
