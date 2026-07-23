@@ -425,8 +425,8 @@ function PracticeUpload({ referenceId, onCreated }: { referenceId: string; onCre
       try {
         const { data: refRow } = await supabase.from("videos").select("file_path").eq("id", referenceId).maybeSingle();
         const { data: refUrl } = await supabase.storage.from("dance-videos").createSignedUrl(refRow!.file_path, 3600);
-        const practiceFrames = await extractFramesFromFile(file, 6);
-        const referenceFrames = await extractFramesFromUrl(refUrl!.signedUrl, 6);
+        const practiceFrames = await extractFramesFromFile(file, 10);
+        const referenceFrames = await extractFramesFromUrl(refUrl!.signedUrl, 10);
         await evaluateFn({
           data: {
             practiceVideoId: inserted.id, referenceVideoId: referenceId,
