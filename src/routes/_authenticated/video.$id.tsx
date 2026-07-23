@@ -26,6 +26,8 @@ export const Route = createFileRoute("/_authenticated/video/$id")({
 
 const ACCEPTED = ["video/mp4", "video/quicktime", "video/x-msvideo", "video/avi", "video/mov"];
 const MAX_SIZE = 500 * 1024 * 1024;
+type AiStep = { key: string; state: "active" | "done" | "error"; label: string };
+
 
 function VideoDetail() {
   const { id } = Route.useParams();
