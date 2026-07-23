@@ -65,16 +65,35 @@ function VideoDetail() {
     },
   });
 
+  const [aiSteps, setAiSteps] = useState<AiStep[]>([]);
+  const setStep = (key: string, state: "active" | "done" | "error", label: string) =>
+    setAiSteps((prev) => {
+      const idx = prev.findIndex((s) => s.key === key);
+      const next = { key, state, label };
+      if (idx >= 0) { const copy = [...prev]; copy[idx] = next; return copy; }
+      return [...prev, next];
+    });
+
   const analyzeMut = useMutation({
     mutationFn: async () => {
       if (!signedUrl) throw new Error("Video not ready");
-      toast.message("Extracting frames…");
-      const frames = await extractFramesFromUrl(signedUrl, 6);
-      toast.message("Analyzing with AI…");
-      return analyzeFn({ data: { videoId: id, frames } });
+      setAiSteps([]);
+      setStep("frames", "active", "Extracting 12 frames from your video");
+      const frames = await extractFramesFromUrl(signedUrl, 12);
+      setStep("frames", "done", `Extracted ${frames.length} frames`);
+      setStep("upload", "active", "Sending frames to AI vision model");
+      setStep("model", "active", "AI is watching your dance");
+      const res = await analyzeFn({ data: { videoId: id, frames } });
+      setStep("upload", "done", "Frames delivered");
+      setStep("model", "done", "AI generated your lesson");
+      setStep("save", "done", "Saved to your library");
+      return res;
     },
     onSuccess: () => { toast.success("Analysis complete"); qc.invalidateQueries({ queryKey: ["video", id] }); },
-    onError: (e: Error) => toast.error(e.message ?? "Analysis failed"),
+    onError: (e: Error) => {
+      setAiSteps((prev) => prev.map((s) => (s.state === "active" ? { ...s, state: "error" } : s)));
+      toast.error(e.message ?? "Analysis failed");
+    },
   });
 
   const analysis = video?.analysis as Analysis | null;
