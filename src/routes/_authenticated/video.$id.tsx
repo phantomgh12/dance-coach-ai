@@ -142,8 +142,11 @@ function VideoDetail() {
                 : analysis ? "Re-analyze" : "Analyze with AI"}
             </Button>
           </CardHeader>
-          <CardContent>
-            {analysis ? <AnalysisView a={analysis} /> : (
+          <CardContent className="space-y-4">
+            {aiSteps.length > 0 && (analyzeMut.isPending || aiSteps.some((s) => s.state === "error")) && (
+              <AiProgress steps={aiSteps} />
+            )}
+            {analysis ? <AnalysisView a={analysis} /> : !analyzeMut.isPending && (
               <p className="text-sm text-muted-foreground">Run AI analysis to generate a step-by-step lesson from your video.</p>
             )}
           </CardContent>
