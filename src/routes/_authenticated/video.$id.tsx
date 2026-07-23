@@ -187,10 +187,10 @@ function VideoDetail() {
             const { data: refData } = await supabase.storage
               .from("dance-videos").createSignedUrl(await getRefPath(video.reference_video_id), 3600);
             if (!refData?.signedUrl) throw new Error("Reference not accessible");
-            toast.message("Extracting frames…");
+            toast.message("Extracting 10 practice + 10 reference frames…");
             const [practiceFrames, referenceFrames] = await Promise.all([
-              extractFramesFromUrl(signedUrl, 6),
-              extractFramesFromUrl(refData.signedUrl, 6),
+              extractFramesFromUrl(signedUrl, 10),
+              extractFramesFromUrl(refData.signedUrl, 10),
             ]);
             toast.message("Scoring your performance…");
             const res = await evaluateFn({
