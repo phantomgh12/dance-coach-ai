@@ -13,7 +13,11 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Sparkles, Loader2, UploadCloud, Trophy, ArrowLeft, Film } from "lucide-react";
+import {
+  Sparkles, Loader2, UploadCloud, Trophy, ArrowLeft, Film,
+  Scissors, Brain, ScanLine, CheckCircle2, Share2, Copy, Music2,
+  Gauge, Flame, Zap, Target, Activity, PersonStanding,
+} from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/video/$id")({
   head: () => ({ meta: [{ title: "Dance analysis — DanceAI" }] }),
