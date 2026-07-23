@@ -34,10 +34,116 @@ function AdminPage() {
     <div className="space-y-8">
       <header>
         <h1 className="font-display text-3xl font-bold">Admin</h1>
-        <p className="text-sm text-muted-foreground">Manage payments and users.</p>
+        <p className="text-sm text-muted-foreground">Manage payments, users, and platform stats.</p>
       </header>
+      <AdminStats />
       <PaymentsAdmin />
+      <AdminUsers />
     </div>
+  );
+}
+
+function AdminStats() {
+  const { data } = useQuery({
+    queryKey: ["admin-stats"],
+    queryFn: async () => {
+      const [users, videos, pending, active] = await Promise.all([
+        supabase.from("profiles").select("id", { count: "exact", head: true }),
+        supabase.from("videos").select("id", { count: "exact", head: true }),
+        supabase.from("payments").select("id", { count: "exact", head: true }).eq("status", "pending"),
+        supabase.from("subscriptions").select("id", { count: "exact", head: true }).neq("plan", "free"),
+      ]);
+      return {
+        users: users.count ?? 0,
+        videos: videos.count ?? 0,
+        pending: pending.count ?? 0,
+        active: active.count ?? 0,
+      };
+    },
+  });
+  const stats = [
+    { label: "Users", value: data?.users ?? "—" },
+    { label: "Videos", value: data?.videos ?? "—" },
+    { label: "Pending payments", value: data?.pending ?? "—" },
+    { label: "Paid subs", value: data?.active ?? "—" },
+  ];
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {stats.map((s) => (
+        <Card key={s.label} className="glass border-border/50">
+          <CardContent className="p-4">
+            <p className="text-xs uppercase text-muted-foreground">{s.label}</p>
+            <p className="font-display text-2xl font-bold">{s.value}</p>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+function AdminUsers() {
+  const qc = useQueryClient();
+  const { data: users } = useQuery({
+    queryKey: ["admin-users"],
+    queryFn: async () => {
+      const { data } = await supabase.from("profiles").select("id, display_name, credits, credits_reset_on").order("credits_reset_on", { ascending: false }).limit(50);
+      return data ?? [];
+    },
+  });
+  const { data: admins } = useQuery({
+    queryKey: ["admin-list"],
+    queryFn: async () => {
+      const { data } = await supabase.from("user_roles").select("user_id").eq("role", "admin");
+      return new Set((data ?? []).map((r) => r.user_id));
+    },
+  });
+
+  const toggleAdmin = async (userId: string, makeAdmin: boolean) => {
+    if (makeAdmin) {
+      const { error } = await supabase.from("user_roles").insert({ user_id: userId, role: "admin" as any });
+      if (error) return toast.error(error.message);
+      toast.success("Granted admin");
+    } else {
+      const { error } = await supabase.from("user_roles").delete().eq("user_id", userId).eq("role", "admin");
+      if (error) return toast.error(error.message);
+      toast.success("Revoked admin");
+    }
+    qc.invalidateQueries({ queryKey: ["admin-list"] });
+  };
+
+  const setCredits = async (userId: string, credits: number) => {
+    const { error } = await supabase.from("profiles").update({ credits }).eq("id", userId);
+    if (error) return toast.error(error.message);
+    toast.success("Credits updated");
+    qc.invalidateQueries({ queryKey: ["admin-users"] });
+  };
+
+  return (
+    <Card className="glass border-border/50">
+      <CardHeader><CardTitle className="font-display">Users</CardTitle></CardHeader>
+      <CardContent className="space-y-2">
+        {users?.map((u) => {
+          const isAdm = admins?.has(u.id);
+          return (
+            <div key={u.id} className="glass flex flex-wrap items-center gap-3 rounded-xl p-3 text-sm">
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-medium">{u.display_name || "Unnamed"}</p>
+                <p className="truncate font-mono text-xs text-muted-foreground">{u.id}</p>
+              </div>
+              <Badge variant="secondary">{u.credits ?? 0} credits</Badge>
+              {isAdm && <Badge>admin</Badge>}
+              <Button size="sm" variant="ghost" onClick={() => {
+                const n = prompt(`Set credits for ${u.display_name || u.id}`, String(u.credits ?? 0));
+                if (n && !isNaN(Number(n))) setCredits(u.id, Number(n));
+              }}>Set credits</Button>
+              <Button size="sm" variant={isAdm ? "destructive" : "outline"} onClick={() => toggleAdmin(u.id, !isAdm)}>
+                {isAdm ? "Revoke" : "Make admin"}
+              </Button>
+            </div>
+          );
+        })}
+      </CardContent>
+    </Card>
   );
 }
 

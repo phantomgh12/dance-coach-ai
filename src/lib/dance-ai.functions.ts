@@ -4,7 +4,7 @@ import { generateText, NoObjectGeneratedError, Output } from "ai";
 import { z } from "zod";
 import { createLovableAiGatewayProvider } from "./ai-gateway.server";
 
-const FramesArray = z.array(z.string().startsWith("data:image/")).min(1).max(10);
+const FramesArray = z.array(z.string().startsWith("data:image/")).min(1).max(24);
 
 const AnalyzeInput = z.object({
   videoId: z.string().uuid(),
@@ -54,8 +54,12 @@ function toImageParts(frames: string[]) {
 function getModel() {
   const key = process.env.LOVABLE_API_KEY;
   if (!key) throw new Error("Missing LOVABLE_API_KEY");
-  const gateway = createLovableAiGatewayProvider(key, { structuredOutputs: true });
-  return gateway("openai/gpt-5.5");
+  // Use Gemini 2.5 Flash — strong multimodal, accepts standard chat messages
+  // (some newer OpenAI models on the gateway reject role:"system" and require the
+  // Responses "instructions" param, which the chat path can't set). Gemini works
+  // cleanly here and is faster/cheaper for vision batches.
+  const gateway = createLovableAiGatewayProvider(key);
+  return gateway("google/gemini-2.5-flash");
 }
 
 function humanizeError(error: unknown): Error {
@@ -82,7 +86,6 @@ export const analyzeDance = createServerFn({ method: "POST" })
       .from("videos").select("*").eq("id", data.videoId).eq("user_id", userId).maybeSingle();
     if (vErr || !video) throw new Error("Video not found");
 
-    // Consume credits BEFORE processing so users can't spam
     const { error: cErr } = await supabase.rpc("consume_credits", {
       _user_id: userId,
       _amount: AI_COST,
@@ -96,16 +99,13 @@ export const analyzeDance = createServerFn({ method: "POST" })
       const { output } = await generateText({
         model,
         output: Output.object({ schema: AnalysisSchema }),
+        system:
+          "You are an expert dance coach. Analyze frames from a dance video and produce a structured beginner-friendly lesson breakdown. Be concise, energetic and specific. Steps should be sequential moves you can see across the frames. Return valid JSON only matching the schema.",
         messages: [
-          {
-            role: "system",
-            content:
-              "You are an expert dance coach. Analyze the frames from a dance video and produce a structured beginner-friendly lesson breakdown. Be concise, energetic and specific. Steps should be sequential moves you can see across the frames. Return valid JSON only.",
-          },
           {
             role: "user",
             content: [
-              { type: "text", text: `Video title: ${video.title}. Analyze these frames and return the lesson.` },
+              { type: "text", text: `Video title: ${video.title}. Analyze these ${data.frames.length} frames (in time order) and return the lesson.` },
               ...toImageParts(data.frames),
             ],
           },
@@ -153,18 +153,15 @@ export const evaluateDance = createServerFn({ method: "POST" })
       const { output } = await generateText({
         model,
         output: Output.object({ schema: EvaluationSchema }),
+        system:
+          "You are a strict but encouraging dance judge. Compare the student's practice against the reference dance. Score each dimension from 0 to 100 (overall is the weighted average). Be specific about what matched and what to fix. Keep feedback concise and actionable. Return valid JSON only matching the schema.",
         messages: [
-          {
-            role: "system",
-            content:
-              "You are a strict but encouraging dance judge. Compare the student's practice against the reference dance. Score each dimension from 0 to 100 (overall is the weighted average). Be specific about what matched and what to fix. Keep feedback concise and actionable. Return valid JSON only.",
-          },
           {
             role: "user",
             content: [
-              { type: "text", text: `Reference dance: ${reference.title}. Frames follow.` },
+              { type: "text", text: `Reference dance: ${reference.title}. ${data.referenceFrames.length} frames follow (time order).` },
               ...toImageParts(data.referenceFrames),
-              { type: "text", text: `Student's practice: ${practice.title}. Frames follow.` },
+              { type: "text", text: `Student's practice: ${practice.title}. ${data.practiceFrames.length} frames follow (time order).` },
               ...toImageParts(data.practiceFrames),
             ],
           },

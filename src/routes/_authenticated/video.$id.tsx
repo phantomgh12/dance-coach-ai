@@ -13,7 +13,11 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Sparkles, Loader2, UploadCloud, Trophy, ArrowLeft, Film } from "lucide-react";
+import {
+  Sparkles, Loader2, UploadCloud, Trophy, ArrowLeft, Film,
+  Scissors, Brain, ScanLine, CheckCircle2, Share2, Copy, Music2,
+  Gauge, Flame, Zap, Target, Activity, PersonStanding,
+} from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/video/$id")({
   head: () => ({ meta: [{ title: "Dance analysis — DanceAI" }] }),
@@ -22,6 +26,8 @@ export const Route = createFileRoute("/_authenticated/video/$id")({
 
 const ACCEPTED = ["video/mp4", "video/quicktime", "video/x-msvideo", "video/avi", "video/mov"];
 const MAX_SIZE = 500 * 1024 * 1024;
+type AiStep = { key: string; state: "active" | "done" | "error"; label: string };
+
 
 function VideoDetail() {
   const { id } = Route.useParams();
@@ -61,16 +67,35 @@ function VideoDetail() {
     },
   });
 
+  const [aiSteps, setAiSteps] = useState<AiStep[]>([]);
+  const setStep = (key: string, state: "active" | "done" | "error", label: string) =>
+    setAiSteps((prev) => {
+      const idx = prev.findIndex((s) => s.key === key);
+      const next = { key, state, label };
+      if (idx >= 0) { const copy = [...prev]; copy[idx] = next; return copy; }
+      return [...prev, next];
+    });
+
   const analyzeMut = useMutation({
     mutationFn: async () => {
       if (!signedUrl) throw new Error("Video not ready");
-      toast.message("Extracting frames…");
-      const frames = await extractFramesFromUrl(signedUrl, 6);
-      toast.message("Analyzing with AI…");
-      return analyzeFn({ data: { videoId: id, frames } });
+      setAiSteps([]);
+      setStep("frames", "active", "Extracting 12 frames from your video");
+      const frames = await extractFramesFromUrl(signedUrl, 12);
+      setStep("frames", "done", `Extracted ${frames.length} frames`);
+      setStep("upload", "active", "Sending frames to AI vision model");
+      setStep("model", "active", "AI is watching your dance");
+      const res = await analyzeFn({ data: { videoId: id, frames } });
+      setStep("upload", "done", "Frames delivered");
+      setStep("model", "done", "AI generated your lesson");
+      setStep("save", "done", "Saved to your library");
+      return res;
     },
     onSuccess: () => { toast.success("Analysis complete"); qc.invalidateQueries({ queryKey: ["video", id] }); },
-    onError: (e: Error) => toast.error(e.message ?? "Analysis failed"),
+    onError: (e: Error) => {
+      setAiSteps((prev) => prev.map((s) => (s.state === "active" ? { ...s, state: "error" } : s)));
+      toast.error(e.message ?? "Analysis failed");
+    },
   });
 
   const analysis = video?.analysis as Analysis | null;
@@ -117,8 +142,11 @@ function VideoDetail() {
                 : analysis ? "Re-analyze" : "Analyze with AI"}
             </Button>
           </CardHeader>
-          <CardContent>
-            {analysis ? <AnalysisView a={analysis} /> : (
+          <CardContent className="space-y-4">
+            {aiSteps.length > 0 && (analyzeMut.isPending || aiSteps.some((s) => s.state === "error")) && (
+              <AiProgress steps={aiSteps} />
+            )}
+            {analysis ? <AnalysisView a={analysis} /> : !analyzeMut.isPending && (
               <p className="text-sm text-muted-foreground">Run AI analysis to generate a step-by-step lesson from your video.</p>
             )}
           </CardContent>
@@ -159,10 +187,10 @@ function VideoDetail() {
             const { data: refData } = await supabase.storage
               .from("dance-videos").createSignedUrl(await getRefPath(video.reference_video_id), 3600);
             if (!refData?.signedUrl) throw new Error("Reference not accessible");
-            toast.message("Extracting frames…");
+            toast.message("Extracting 10 practice + 10 reference frames…");
             const [practiceFrames, referenceFrames] = await Promise.all([
-              extractFramesFromUrl(signedUrl, 6),
-              extractFramesFromUrl(refData.signedUrl, 6),
+              extractFramesFromUrl(signedUrl, 10),
+              extractFramesFromUrl(refData.signedUrl, 10),
             ]);
             toast.message("Scoring your performance…");
             const res = await evaluateFn({
@@ -201,13 +229,59 @@ type Evaluation = {
   strengths: string[]; improvements: string[]; summary: string;
 };
 
+function AiProgress({ steps }: { steps: AiStep[] }) {
+  const done = steps.filter((s) => s.state === "done").length;
+  const total = Math.max(steps.length, 4);
+  return (
+    <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <p className="flex items-center gap-2 text-sm font-medium">
+          <Brain className="h-4 w-4 animate-pulse text-primary" /> AI is working…
+        </p>
+        <span className="text-xs text-muted-foreground">{done}/{total}</span>
+      </div>
+      <Progress value={(done / total) * 100} className="mb-3 h-1.5" />
+      <ol className="space-y-1.5 text-sm">
+        {steps.map((s) => {
+          const Icon = s.key === "frames" ? Scissors : s.key === "upload" ? UploadCloud : s.key === "model" ? ScanLine : CheckCircle2;
+          return (
+            <li key={s.key} className="flex items-center gap-2">
+              {s.state === "active" ? <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" /> :
+                s.state === "done" ? <CheckCircle2 className="h-3.5 w-3.5 text-primary" /> :
+                <Icon className="h-3.5 w-3.5 text-destructive" />}
+              <span className={s.state === "error" ? "text-destructive" : s.state === "done" ? "text-foreground" : "text-muted-foreground"}>
+                {s.label}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
+
 function AnalysisView({ a }: { a: Analysis }) {
+  const copyLesson = () => {
+    const text = `${a.style} — ${a.difficulty} · ${a.tempo}\n\n${a.summary}\n\nSteps:\n${a.steps.map((s, i) => `${i + 1}. ${s.name} — ${s.description} (Tip: ${s.tip})`).join("\n")}\n\nKey moves: ${a.keyMoves.join(", ")}\n\nTips: ${a.practiceTips.join(" · ")}`;
+    navigator.clipboard.writeText(text);
+    toast.success("Lesson copied to clipboard");
+  };
+  const share = async () => {
+    try {
+      if (navigator.share) await navigator.share({ title: "DanceAI lesson", text: a.summary, url: window.location.href });
+      else { await navigator.clipboard.writeText(window.location.href); toast.success("Link copied"); }
+    } catch {}
+  };
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
-        <Badge variant="secondary">Style: {a.style}</Badge>
-        <Badge variant="secondary" className="capitalize">Level: {a.difficulty}</Badge>
-        <Badge variant="secondary">Tempo: {a.tempo}</Badge>
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant="secondary"><Music2 className="mr-1 h-3 w-3" />{a.style}</Badge>
+        <Badge variant="secondary" className="capitalize"><Flame className="mr-1 h-3 w-3" />{a.difficulty}</Badge>
+        <Badge variant="secondary"><Gauge className="mr-1 h-3 w-3" />{a.tempo}</Badge>
+        <div className="ml-auto flex gap-1">
+          <Button size="sm" variant="ghost" onClick={copyLesson}><Copy className="h-3.5 w-3.5" /></Button>
+          <Button size="sm" variant="ghost" onClick={share}><Share2 className="h-3.5 w-3.5" /></Button>
+        </div>
       </div>
       <p className="text-sm">{a.summary}</p>
 
@@ -268,12 +342,18 @@ function PracticeEvaluation({
         {feedback ? (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-              {(["timing","accuracy","energy","posture","overall"] as const).map((k) => (
-                <div key={k} className="glass rounded-xl p-3 text-center">
-                  <p className="text-xs uppercase text-muted-foreground">{k}</p>
-                  <p className="font-display text-2xl font-bold">{Math.round(feedback.scores[k])}</p>
-                </div>
-              ))}
+              {(["timing","accuracy","energy","posture","overall"] as const).map((k) => {
+                const Icon = k === "timing" ? Activity : k === "accuracy" ? Target : k === "energy" ? Zap : k === "posture" ? PersonStanding : Trophy;
+                const score = Math.round(feedback.scores[k]);
+                const tone = score >= 80 ? "text-primary" : score >= 60 ? "text-foreground" : "text-destructive";
+                return (
+                  <div key={k} className="glass rounded-xl p-3 text-center">
+                    <Icon className={`mx-auto mb-1 h-4 w-4 ${tone}`} />
+                    <p className="text-xs uppercase text-muted-foreground">{k}</p>
+                    <p className={`font-display text-2xl font-bold ${tone}`}>{score}</p>
+                  </div>
+                );
+              })}
             </div>
             <p className="text-sm">{feedback.summary}</p>
             {feedback.strengths?.length > 0 && (
@@ -345,8 +425,8 @@ function PracticeUpload({ referenceId, onCreated }: { referenceId: string; onCre
       try {
         const { data: refRow } = await supabase.from("videos").select("file_path").eq("id", referenceId).maybeSingle();
         const { data: refUrl } = await supabase.storage.from("dance-videos").createSignedUrl(refRow!.file_path, 3600);
-        const practiceFrames = await extractFramesFromFile(file, 6);
-        const referenceFrames = await extractFramesFromUrl(refUrl!.signedUrl, 6);
+        const practiceFrames = await extractFramesFromFile(file, 10);
+        const referenceFrames = await extractFramesFromUrl(refUrl!.signedUrl, 10);
         await evaluateFn({
           data: {
             practiceVideoId: inserted.id, referenceVideoId: referenceId,
