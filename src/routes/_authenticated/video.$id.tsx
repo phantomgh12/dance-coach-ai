@@ -342,12 +342,18 @@ function PracticeEvaluation({
         {feedback ? (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-              {(["timing","accuracy","energy","posture","overall"] as const).map((k) => (
-                <div key={k} className="glass rounded-xl p-3 text-center">
-                  <p className="text-xs uppercase text-muted-foreground">{k}</p>
-                  <p className="font-display text-2xl font-bold">{Math.round(feedback.scores[k])}</p>
-                </div>
-              ))}
+              {(["timing","accuracy","energy","posture","overall"] as const).map((k) => {
+                const Icon = k === "timing" ? Activity : k === "accuracy" ? Target : k === "energy" ? Zap : k === "posture" ? PersonStanding : Trophy;
+                const score = Math.round(feedback.scores[k]);
+                const tone = score >= 80 ? "text-primary" : score >= 60 ? "text-foreground" : "text-destructive";
+                return (
+                  <div key={k} className="glass rounded-xl p-3 text-center">
+                    <Icon className={`mx-auto mb-1 h-4 w-4 ${tone}`} />
+                    <p className="text-xs uppercase text-muted-foreground">{k}</p>
+                    <p className={`font-display text-2xl font-bold ${tone}`}>{score}</p>
+                  </div>
+                );
+              })}
             </div>
             <p className="text-sm">{feedback.summary}</p>
             {feedback.strengths?.length > 0 && (
