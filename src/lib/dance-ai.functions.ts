@@ -65,13 +65,19 @@ function getModel() {
 function humanizeError(error: unknown): Error {
   if (error instanceof Error) {
     const msg = error.message ?? "";
-    if (msg.includes("429") || msg.toLowerCase().includes("rate")) {
+    const lower = msg.toLowerCase();
+    // Match "rate limit"/"rate-limit"/"ratelimit" — NOT the substring "rate" inside "generated"
+    if (msg.includes("429") || /rate[-\s]?limit|too many requests/i.test(msg)) {
       return new Error("AI is busy right now. Try again in a moment.");
     }
-    if (msg.includes("402") || msg.toLowerCase().includes("credit")) {
+    if (msg.includes("402") || lower.includes("credits exhausted") || lower.includes("payment required")) {
       return new Error("AI credits exhausted. Please upgrade or wait for the next reset.");
     }
-    return error;
+    if (NoObjectGeneratedError.isInstance(error)) {
+      return new Error("AI response couldn't be parsed. Try again — using clearer frames helps.");
+    }
+    // Surface the real error so customers/support can act on it
+    return new Error(msg || "Something went wrong");
   }
   return new Error("Something went wrong");
 }
