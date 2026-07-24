@@ -125,30 +125,33 @@ export const analyzeDance = createServerFn({ method: "POST" })
 
     await supabase.from("videos").update({ status: "processing" }).eq("id", video.id);
 
-    const model = getModel();
+    const gateway = getGateway();
     try {
-      const { output } = await generateText({
-        model,
-        output: Output.object({ schema: AnalysisSchema }),
-        system:
-          "You are an expert dance coach. Analyze frames from a dance video and produce a structured beginner-friendly lesson breakdown. Be concise, energetic and specific. Steps should be sequential moves you can see across the frames. Return valid JSON only matching the schema.",
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "text", text: `Video title: ${video.title}. Analyze these ${data.frames.length} frames (in time order) and return the lesson.` },
-              ...toImageParts(data.frames),
-            ],
-          },
-        ],
+      const { result: output, modelUsed } = await runWithFallback(async (modelId) => {
+        const { output } = await generateText({
+          model: gateway(modelId),
+          output: Output.object({ schema: AnalysisSchema }),
+          system:
+            "You are an expert dance coach. Analyze frames from a dance video and produce a structured beginner-friendly lesson breakdown. Be concise, energetic and specific. Steps should be sequential moves you can see across the frames. Return valid JSON only matching the schema.",
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: `Video title: ${video.title}. Analyze these ${data.frames.length} frames (in time order) and return the lesson.` },
+                ...toImageParts(data.frames),
+              ],
+            },
+          ],
+        });
+        return output;
       });
 
       await supabase.from("videos").update({
-        analysis: output,
+        analysis: { ...output, _model: modelUsed },
         status: "analyzed",
       }).eq("id", video.id);
 
-      return { ok: true, analysis: output };
+      return { ok: true, analysis: output, modelUsed };
     } catch (error) {
       const fallback = NoObjectGeneratedError.isInstance(error) ? (error as { text?: string }).text ?? null : null;
       await supabase.from("videos").update({
