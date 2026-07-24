@@ -51,15 +51,40 @@ function toImageParts(frames: string[]) {
   return frames.map((url) => ({ type: "image" as const, image: url }));
 }
 
-function getModel() {
+// Plan A → Plan B fallback list. If a call to model[0] fails, we automatically
+// retry with model[1], etc. Keeps customers from hitting hard failures when
+// one provider hiccups.
+const FALLBACK_MODELS = [
+  "google/gemini-2.5-flash",
+  "google/gemini-3.5-flash",
+  "openai/gpt-5-mini",
+] as const;
+
+function getGateway() {
   const key = process.env.LOVABLE_API_KEY;
   if (!key) throw new Error("Missing LOVABLE_API_KEY");
-  // Use Gemini 2.5 Flash — strong multimodal, accepts standard chat messages
-  // (some newer OpenAI models on the gateway reject role:"system" and require the
-  // Responses "instructions" param, which the chat path can't set). Gemini works
-  // cleanly here and is faster/cheaper for vision batches.
-  const gateway = createLovableAiGatewayProvider(key);
-  return gateway("google/gemini-2.5-flash");
+  return createLovableAiGatewayProvider(key);
+}
+
+export async function runWithFallback<T>(
+  fn: (modelId: string) => Promise<T>,
+): Promise<{ result: T; modelUsed: string }> {
+  let lastError: unknown = null;
+  for (const modelId of FALLBACK_MODELS) {
+    try {
+      const result = await fn(modelId);
+      return { result, modelUsed: modelId };
+    } catch (error) {
+      lastError = error;
+      const msg = error instanceof Error ? error.message.toLowerCase() : "";
+      // Don't waste fallbacks on user errors (credits, auth, validation)
+      if (msg.includes("402") || msg.includes("credits exhausted") || msg.includes("unauthorized")) {
+        throw error;
+      }
+      // Keep going to next model
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("All AI models failed");
 }
 
 function humanizeError(error: unknown): Error {
@@ -100,30 +125,33 @@ export const analyzeDance = createServerFn({ method: "POST" })
 
     await supabase.from("videos").update({ status: "processing" }).eq("id", video.id);
 
-    const model = getModel();
+    const gateway = getGateway();
     try {
-      const { output } = await generateText({
-        model,
-        output: Output.object({ schema: AnalysisSchema }),
-        system:
-          "You are an expert dance coach. Analyze frames from a dance video and produce a structured beginner-friendly lesson breakdown. Be concise, energetic and specific. Steps should be sequential moves you can see across the frames. Return valid JSON only matching the schema.",
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "text", text: `Video title: ${video.title}. Analyze these ${data.frames.length} frames (in time order) and return the lesson.` },
-              ...toImageParts(data.frames),
-            ],
-          },
-        ],
+      const { result: output, modelUsed } = await runWithFallback(async (modelId) => {
+        const { output } = await generateText({
+          model: gateway(modelId),
+          output: Output.object({ schema: AnalysisSchema }),
+          system:
+            "You are an expert dance coach. Analyze frames from a dance video and produce a structured beginner-friendly lesson breakdown. Be concise, energetic and specific. Steps should be sequential moves you can see across the frames. Return valid JSON only matching the schema.",
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: `Video title: ${video.title}. Analyze these ${data.frames.length} frames (in time order) and return the lesson.` },
+                ...toImageParts(data.frames),
+              ],
+            },
+          ],
+        });
+        return output;
       });
 
       await supabase.from("videos").update({
-        analysis: output,
+        analysis: { ...output, _model: modelUsed },
         status: "analyzed",
       }).eq("id", video.id);
 
-      return { ok: true, analysis: output };
+      return { ok: true, analysis: output, modelUsed };
     } catch (error) {
       const fallback = NoObjectGeneratedError.isInstance(error) ? (error as { text?: string }).text ?? null : null;
       await supabase.from("videos").update({
@@ -154,35 +182,38 @@ export const evaluateDance = createServerFn({ method: "POST" })
 
     await supabase.from("videos").update({ status: "processing" }).eq("id", practice.id);
 
-    const model = getModel();
+    const gateway = getGateway();
     try {
-      const { output } = await generateText({
-        model,
-        output: Output.object({ schema: EvaluationSchema }),
-        system:
-          "You are a strict but encouraging dance judge. Compare the student's practice against the reference dance. Score each dimension from 0 to 100 (overall is the weighted average). Be specific about what matched and what to fix. Keep feedback concise and actionable. Return valid JSON only matching the schema.",
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "text", text: `Reference dance: ${reference.title}. ${data.referenceFrames.length} frames follow (time order).` },
-              ...toImageParts(data.referenceFrames),
-              { type: "text", text: `Student's practice: ${practice.title}. ${data.practiceFrames.length} frames follow (time order).` },
-              ...toImageParts(data.practiceFrames),
-            ],
-          },
-        ],
+      const { result: output, modelUsed } = await runWithFallback(async (modelId) => {
+        const { output } = await generateText({
+          model: gateway(modelId),
+          output: Output.object({ schema: EvaluationSchema }),
+          system:
+            "You are a strict but encouraging dance judge. Compare the student's practice against the reference dance. Score each dimension from 0 to 100 (overall is the weighted average). Be specific about what matched and what to fix. Keep feedback concise and actionable. Return valid JSON only matching the schema.",
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: `Reference dance: ${reference.title}. ${data.referenceFrames.length} frames follow (time order).` },
+                ...toImageParts(data.referenceFrames),
+                { type: "text", text: `Student's practice: ${practice.title}. ${data.practiceFrames.length} frames follow (time order).` },
+                ...toImageParts(data.practiceFrames),
+              ],
+            },
+          ],
+        });
+        return output;
       });
 
       const overall = Math.max(0, Math.min(100, Math.round(output.scores.overall)));
 
       await supabase.from("videos").update({
-        feedback: output,
+        feedback: { ...output, _model: modelUsed },
         score: overall,
         status: "analyzed",
       }).eq("id", practice.id);
 
-      return { ok: true, evaluation: output };
+      return { ok: true, evaluation: output, modelUsed };
     } catch (error) {
       await supabase.from("videos").update({ status: "failed" }).eq("id", practice.id);
       throw humanizeError(error);
