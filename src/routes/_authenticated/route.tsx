@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import {
-  LayoutDashboard, Upload as UploadIcon, Crown, History, Shield, LogOut, Menu,
+  LayoutDashboard, Upload as UploadIcon, Crown, History, Shield, LogOut, Menu, Mic,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
