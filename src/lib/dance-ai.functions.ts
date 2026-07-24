@@ -182,35 +182,38 @@ export const evaluateDance = createServerFn({ method: "POST" })
 
     await supabase.from("videos").update({ status: "processing" }).eq("id", practice.id);
 
-    const model = getModel();
+    const gateway = getGateway();
     try {
-      const { output } = await generateText({
-        model,
-        output: Output.object({ schema: EvaluationSchema }),
-        system:
-          "You are a strict but encouraging dance judge. Compare the student's practice against the reference dance. Score each dimension from 0 to 100 (overall is the weighted average). Be specific about what matched and what to fix. Keep feedback concise and actionable. Return valid JSON only matching the schema.",
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "text", text: `Reference dance: ${reference.title}. ${data.referenceFrames.length} frames follow (time order).` },
-              ...toImageParts(data.referenceFrames),
-              { type: "text", text: `Student's practice: ${practice.title}. ${data.practiceFrames.length} frames follow (time order).` },
-              ...toImageParts(data.practiceFrames),
-            ],
-          },
-        ],
+      const { result: output, modelUsed } = await runWithFallback(async (modelId) => {
+        const { output } = await generateText({
+          model: gateway(modelId),
+          output: Output.object({ schema: EvaluationSchema }),
+          system:
+            "You are a strict but encouraging dance judge. Compare the student's practice against the reference dance. Score each dimension from 0 to 100 (overall is the weighted average). Be specific about what matched and what to fix. Keep feedback concise and actionable. Return valid JSON only matching the schema.",
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: `Reference dance: ${reference.title}. ${data.referenceFrames.length} frames follow (time order).` },
+                ...toImageParts(data.referenceFrames),
+                { type: "text", text: `Student's practice: ${practice.title}. ${data.practiceFrames.length} frames follow (time order).` },
+                ...toImageParts(data.practiceFrames),
+              ],
+            },
+          ],
+        });
+        return output;
       });
 
       const overall = Math.max(0, Math.min(100, Math.round(output.scores.overall)));
 
       await supabase.from("videos").update({
-        feedback: output,
+        feedback: { ...output, _model: modelUsed },
         score: overall,
         status: "analyzed",
       }).eq("id", practice.id);
 
-      return { ok: true, evaluation: output };
+      return { ok: true, evaluation: output, modelUsed };
     } catch (error) {
       await supabase.from("videos").update({ status: "failed" }).eq("id", practice.id);
       throw humanizeError(error);
