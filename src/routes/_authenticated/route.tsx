@@ -38,6 +38,7 @@ function AuthenticatedLayout() {
   const nav = [
     { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { to: "/upload", label: "Upload", icon: UploadIcon },
+    { to: "/music", label: "Vocal Coach", icon: Mic },
     { to: "/history", label: "History", icon: History },
     { to: "/plans", label: "Plans", icon: Crown },
   ] as const;
