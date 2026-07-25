@@ -21,7 +21,7 @@ const AnalysisSchema = z.object({
   practiceTips: z.array(z.string()),
   _algo: z.string(),
   _features: z.any().optional(),
-}).passthrough();
+});
 
 export type VocalAnalysisResult = z.infer<typeof AnalysisSchema>;
 
