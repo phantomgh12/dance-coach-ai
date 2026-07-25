@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import {
-  LayoutDashboard, Upload as UploadIcon, Crown, History, Shield, LogOut, Menu, Mic,
+  LayoutDashboard, Upload as UploadIcon, Crown, History, Shield, LogOut, Menu, Mic, GraduationCap,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -38,7 +38,8 @@ function AuthenticatedLayout() {
   const nav = [
     { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { to: "/upload", label: "Upload", icon: UploadIcon },
-    { to: "/music", label: "Vocal Coach", icon: Mic },
+    { to: "/music", label: "Vocal", icon: Mic },
+    { to: "/train", label: "Train", icon: GraduationCap },
     { to: "/history", label: "History", icon: History },
     { to: "/plans", label: "Plans", icon: Crown },
   ] as const;

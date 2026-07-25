@@ -14,6 +14,69 @@ export type Database = {
   }
   public: {
     Tables: {
+      algo_training_samples: {
+        Row: {
+          accepted: boolean
+          created_at: string
+          credits_awarded: number
+          effort: number
+          features: Json
+          id: string
+          kind: string
+          labels: Json
+          quality: number
+          rejection_reason: string | null
+          user_id: string
+        }
+        Insert: {
+          accepted?: boolean
+          created_at?: string
+          credits_awarded?: number
+          effort?: number
+          features: Json
+          id?: string
+          kind: string
+          labels: Json
+          quality?: number
+          rejection_reason?: string | null
+          user_id: string
+        }
+        Update: {
+          accepted?: boolean
+          created_at?: string
+          credits_awarded?: number
+          effort?: number
+          features?: Json
+          id?: string
+          kind?: string
+          labels?: Json
+          quality?: number
+          rejection_reason?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      algo_weights: {
+        Row: {
+          kind: string
+          sample_count: number
+          updated_at: string
+          weights: Json
+        }
+        Insert: {
+          kind: string
+          sample_count?: number
+          updated_at?: string
+          weights?: Json
+        }
+        Update: {
+          kind?: string
+          sample_count?: number
+          updated_at?: string
+          weights?: Json
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           body: string | null
@@ -237,6 +300,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      award_training_credits: {
+        Args: { _amount: number; _user_id: string }
+        Returns: number
+      }
       consume_credits: {
         Args: { _amount: number; _user_id: string }
         Returns: number
