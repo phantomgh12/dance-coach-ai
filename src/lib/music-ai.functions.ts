@@ -1,115 +1,96 @@
+// Server functions for the vocal algorithm — no LLM. Client computes features
+// from the audio buffer, we validate, charge credits, and (optionally) accept
+// as training data.
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { generateText, NoObjectGeneratedError, Output } from "ai";
 import { z } from "zod";
-import { createLovableAiGatewayProvider } from "./ai-gateway.server";
-import { runWithFallback } from "./dance-ai.functions";
 
 const AI_COST = 10;
 
-const AnalyzeInput = z.object({
-  title: z.string().min(1).max(200),
-  genre: z.string().max(60).optional(),
-  lyricsOrNotes: z.string().max(4000).optional(),
-  // Optional audio: data URL of a short clip (client should keep under ~4MB)
-  audioDataUrl: z.string().startsWith("data:audio/").optional(),
-  audioMime: z.string().max(50).optional(),
-});
-
-const VocalSchema = z.object({
+const AnalysisSchema = z.object({
   summary: z.string(),
   strengths: z.array(z.string()),
   improvements: z.array(z.string()),
   scores: z.object({
-    pitch: z.number(),
-    timing: z.number(),
-    breath: z.number(),
-    tone: z.number(),
-    expression: z.number(),
-    overall: z.number(),
+    pitch: z.number(), timing: z.number(), breath: z.number(),
+    tone: z.number(), expression: z.number(), overall: z.number(),
   }),
   warmups: z.array(z.object({
-    name: z.string(),
-    instruction: z.string(),
-    durationMinutes: z.number(),
+    name: z.string(), instruction: z.string(), durationMinutes: z.number(),
   })),
   practiceTips: z.array(z.string()),
-});
+  _algo: z.string(),
+  _features: z.any().optional(),
+}).passthrough();
 
-function humanize(error: unknown): Error {
-  if (error instanceof Error) {
-    const msg = error.message ?? "";
-    if (msg.includes("429") || /rate[-\s]?limit|too many requests/i.test(msg)) {
-      return new Error("AI is busy right now. Try again in a moment.");
-    }
-    if (msg.includes("402") || msg.toLowerCase().includes("credits exhausted")) {
-      return new Error("AI credits exhausted. Please upgrade or wait for reset.");
-    }
-    if (NoObjectGeneratedError.isInstance(error)) {
-      return new Error("AI response couldn't be parsed. Try again.");
-    }
-    return new Error(msg || "Something went wrong");
-  }
-  return new Error("Something went wrong");
-}
-
-function getGateway() {
-  const key = process.env.LOVABLE_API_KEY;
-  if (!key) throw new Error("Missing LOVABLE_API_KEY");
-  return createLovableAiGatewayProvider(key);
-}
+export type VocalAnalysisResult = z.infer<typeof AnalysisSchema>;
 
 export const analyzeVocal = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) => AnalyzeInput.parse(input))
+  .inputValidator((input: unknown) => z.object({
+    title: z.string().min(1).max(200),
+    genre: z.string().max(60).optional(),
+    analysis: AnalysisSchema,
+  }).parse(input))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-
-    const { error: cErr } = await supabase.rpc("consume_credits", {
-      _user_id: userId,
-      _amount: AI_COST,
-    });
+    if (!data.analysis.warmups.length) throw new Error("Analysis was empty");
+    const { error: cErr } = await supabase.rpc("consume_credits", { _user_id: userId, _amount: AI_COST });
     if (cErr) throw new Error(cErr.message);
+    return { ok: true, analysis: data.analysis, modelUsed: "algo/v1-audio", title: data.title };
+  });
 
-    const gateway = getGateway();
+export const submitVocalTraining = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({
+    features: z.record(z.string(), z.any()),
+    labels: z.object({
+      pitch: z.number().min(0).max(100),
+      timing: z.number().min(0).max(100),
+      breath: z.number().min(0).max(100),
+      tone: z.number().min(0).max(100),
+      expression: z.number().min(0).max(100),
+    }),
+    effort: z.number().int().min(1).max(10),
+  }).parse(input))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const f = data.features as { durationSec?: number; avgRms?: number };
 
-    const userContent: Array<
-      | { type: "text"; text: string }
-      | { type: "file"; data: string; mediaType: string }
-    > = [
-      {
-        type: "text",
-        text: `Song / performance title: ${data.title}${data.genre ? ` (genre: ${data.genre})` : ""}.\n\n${
-          data.lyricsOrNotes ? `Notes / lyrics from the singer:\n${data.lyricsOrNotes}\n\n` : ""
-        }${
-          data.audioDataUrl
-            ? "An audio clip of the performance is attached. Analyze pitch, timing, breath support, tone, and expression from what you can hear."
-            : "No audio was uploaded. Give general vocal coaching based on the song, notes, and best practices for the genre — clearly state you did not hear the singer."
-        }`,
-      },
-    ];
+    const reasons: string[] = [];
+    if (!f.durationSec || (f.durationSec ?? 0) < 3) reasons.push("Clip too short (<3s)");
+    if ((f.avgRms ?? 0) < 0.005) reasons.push("Clip is silent or too quiet");
 
-    if (data.audioDataUrl) {
-      // Extract the mime from the data URL header (e.g. data:audio/mpeg;base64,...)
-      const headerMatch = /^data:([^;,]+)/.exec(data.audioDataUrl);
-      const mime = data.audioMime || headerMatch?.[1] || "audio/mpeg";
-      userContent.push({ type: "file", data: data.audioDataUrl, mediaType: mime });
-    }
+    // Dedup vs recent
+    const { data: recent } = await supabase
+      .from("algo_training_samples")
+      .select("features")
+      .eq("user_id", userId).eq("kind", "vocal")
+      .order("created_at", { ascending: false }).limit(5);
+    if (recent?.some((r) => {
+      const rf = r.features as { avgRms?: number; durationSec?: number };
+      return Math.abs((rf.avgRms ?? 0) - (f.avgRms ?? 0)) < 0.001
+          && Math.abs((rf.durationSec ?? 0) - (f.durationSec ?? 0)) < 0.5;
+    })) reasons.push("Too similar to a recent submission");
 
-    try {
-      const { result: output, modelUsed } = await runWithFallback(async (modelId) => {
-        const { output } = await generateText({
-          model: gateway(modelId),
-          output: Output.object({ schema: VocalSchema }),
-          system:
-            "You are an encouraging but honest vocal coach. Give structured feedback on the singer's performance covering pitch, timing, breath, tone, and expression. Score each dimension 0-100 (overall is the weighted average). Recommend 3-5 concrete warmups. Return valid JSON only matching the schema.",
-          messages: [{ role: "user", content: userContent }],
-        });
-        return output;
+    const accepted = reasons.length === 0;
+    const quality = accepted ? Math.min(1, 0.35 + (data.effort / 10) * 0.5) : 0;
+
+    const { error: insErr } = await supabase.from("algo_training_samples").insert({
+      user_id: userId, kind: "vocal",
+      features: data.features, labels: data.labels,
+      quality, accepted, rejection_reason: reasons.join("; ") || null,
+      effort: data.effort, credits_awarded: 0,
+    });
+    if (insErr) throw new Error(insErr.message);
+
+    let awarded = 0;
+    if (accepted) {
+      const request = Math.max(1, Math.round(data.effort * 2 * quality));
+      const { data: rewarded } = await supabase.rpc("award_training_credits", {
+        _user_id: userId, _amount: request,
       });
-
-      return { ok: true, analysis: output, modelUsed };
-    } catch (error) {
-      throw humanize(error);
+      awarded = Number(rewarded ?? 0);
     }
+    return { accepted, awarded, quality: Math.round(quality * 100), rejection: reasons };
   });

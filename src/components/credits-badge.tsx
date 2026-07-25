@@ -17,7 +17,6 @@ export function CreditsBadge() {
         .select("credits, credits_reset_on")
         .eq("id", user!.id)
         .maybeSingle();
-      // Handle daily reset display-side too
       const today = new Date().toISOString().slice(0, 10);
       if (data && data.credits_reset_on < today) {
         return { credits: FREE_DAILY_CREDITS, stale: true };
@@ -32,12 +31,12 @@ export function CreditsBadge() {
   return (
     <Link
       to="/plans"
-      className={`glass hidden sm:inline-flex items-center gap-1.5 rounded-full border border-border/50 px-3 py-1 text-xs font-medium transition-colors hover:bg-white/5 ${low ? "text-primary" : ""}`}
-      title="AI credits · Click to upgrade"
+      className={`glass inline-flex items-center gap-1 rounded-full border border-border/50 px-2.5 py-1 text-xs font-medium transition-colors hover:bg-white/5 ${low ? "text-primary" : ""}`}
+      title="Credits · tap to upgrade"
     >
       <Zap className={`h-3.5 w-3.5 ${low ? "text-primary" : ""}`} />
       <span className="tabular-nums">{credits}</span>
-      <span className="text-muted-foreground">credits</span>
+      <span className="hidden sm:inline text-muted-foreground">credits</span>
     </Link>
   );
 }
