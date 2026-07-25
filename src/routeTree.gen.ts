@@ -16,6 +16,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedUploadRouteImport } from './routes/_authenticated/upload'
+import { Route as AuthenticatedTrainRouteImport } from './routes/_authenticated/train'
 import { Route as AuthenticatedPlansRouteImport } from './routes/_authenticated/plans'
 import { Route as AuthenticatedMusicRouteImport } from './routes/_authenticated/music'
 import { Route as AuthenticatedHistoryRouteImport } from './routes/_authenticated/history'
@@ -56,6 +57,11 @@ const IndexRoute = IndexRouteImport.update({
 const AuthenticatedUploadRoute = AuthenticatedUploadRouteImport.update({
   id: '/upload',
   path: '/upload',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedTrainRoute = AuthenticatedTrainRouteImport.update({
+  id: '/train',
+  path: '/train',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedPlansRoute = AuthenticatedPlansRouteImport.update({
@@ -106,6 +112,7 @@ export interface FileRoutesByFullPath {
   '/history': typeof AuthenticatedHistoryRoute
   '/music': typeof AuthenticatedMusicRoute
   '/plans': typeof AuthenticatedPlansRoute
+  '/train': typeof AuthenticatedTrainRoute
   '/upload': typeof AuthenticatedUploadRoute
   '/payment/$plan': typeof AuthenticatedPaymentPlanRoute
   '/video/$id': typeof AuthenticatedVideoIdRoute
@@ -121,6 +128,7 @@ export interface FileRoutesByTo {
   '/history': typeof AuthenticatedHistoryRoute
   '/music': typeof AuthenticatedMusicRoute
   '/plans': typeof AuthenticatedPlansRoute
+  '/train': typeof AuthenticatedTrainRoute
   '/upload': typeof AuthenticatedUploadRoute
   '/payment/$plan': typeof AuthenticatedPaymentPlanRoute
   '/video/$id': typeof AuthenticatedVideoIdRoute
@@ -138,6 +146,7 @@ export interface FileRoutesById {
   '/_authenticated/history': typeof AuthenticatedHistoryRoute
   '/_authenticated/music': typeof AuthenticatedMusicRoute
   '/_authenticated/plans': typeof AuthenticatedPlansRoute
+  '/_authenticated/train': typeof AuthenticatedTrainRoute
   '/_authenticated/upload': typeof AuthenticatedUploadRoute
   '/_authenticated/payment/$plan': typeof AuthenticatedPaymentPlanRoute
   '/_authenticated/video/$id': typeof AuthenticatedVideoIdRoute
@@ -155,6 +164,7 @@ export interface FileRouteTypes {
     | '/history'
     | '/music'
     | '/plans'
+    | '/train'
     | '/upload'
     | '/payment/$plan'
     | '/video/$id'
@@ -170,6 +180,7 @@ export interface FileRouteTypes {
     | '/history'
     | '/music'
     | '/plans'
+    | '/train'
     | '/upload'
     | '/payment/$plan'
     | '/video/$id'
@@ -186,6 +197,7 @@ export interface FileRouteTypes {
     | '/_authenticated/history'
     | '/_authenticated/music'
     | '/_authenticated/plans'
+    | '/_authenticated/train'
     | '/_authenticated/upload'
     | '/_authenticated/payment/$plan'
     | '/_authenticated/video/$id'
@@ -251,6 +263,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedUploadRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/train': {
+      id: '/_authenticated/train'
+      path: '/train'
+      fullPath: '/train'
+      preLoaderRoute: typeof AuthenticatedTrainRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/plans': {
       id: '/_authenticated/plans'
       path: '/plans'
@@ -309,6 +328,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedHistoryRoute: typeof AuthenticatedHistoryRoute
   AuthenticatedMusicRoute: typeof AuthenticatedMusicRoute
   AuthenticatedPlansRoute: typeof AuthenticatedPlansRoute
+  AuthenticatedTrainRoute: typeof AuthenticatedTrainRoute
   AuthenticatedUploadRoute: typeof AuthenticatedUploadRoute
   AuthenticatedPaymentPlanRoute: typeof AuthenticatedPaymentPlanRoute
   AuthenticatedVideoIdRoute: typeof AuthenticatedVideoIdRoute
@@ -320,6 +340,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedHistoryRoute: AuthenticatedHistoryRoute,
   AuthenticatedMusicRoute: AuthenticatedMusicRoute,
   AuthenticatedPlansRoute: AuthenticatedPlansRoute,
+  AuthenticatedTrainRoute: AuthenticatedTrainRoute,
   AuthenticatedUploadRoute: AuthenticatedUploadRoute,
   AuthenticatedPaymentPlanRoute: AuthenticatedPaymentPlanRoute,
   AuthenticatedVideoIdRoute: AuthenticatedVideoIdRoute,
