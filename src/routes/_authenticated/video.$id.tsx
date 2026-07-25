@@ -5,18 +5,20 @@ import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
-import { analyzeDance, evaluateDance } from "@/lib/dance-ai.functions";
+import { analyzeDance, evaluateDance, submitDanceTraining } from "@/lib/dance-ai.functions";
 import { extractFramesFromFile, extractFramesFromUrl } from "@/lib/frames";
+import { computeDanceFeatures, summarizeDance, scoreDance, type DanceFeatures } from "@/lib/dance-algo";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
 import {
   Sparkles, Loader2, UploadCloud, Trophy, ArrowLeft, Film,
   Scissors, Brain, ScanLine, CheckCircle2, Share2, Copy, Music2,
-  Gauge, Flame, Zap, Target, Activity, PersonStanding,
+  Gauge, Flame, Zap, Target, Activity, PersonStanding, GraduationCap,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/video/$id")({
@@ -28,6 +30,18 @@ const ACCEPTED = ["video/mp4", "video/quicktime", "video/x-msvideo", "video/avi"
 const MAX_SIZE = 500 * 1024 * 1024;
 type AiStep = { key: string; state: "active" | "done" | "error"; label: string };
 
+const DANCE_WEIGHTS_FALLBACK = { timing: 0.28, accuracy: 0.32, energy: 0.2, posture: 0.2 };
+
+async function loadDanceWeights() {
+  const { data } = await supabase.from("algo_weights").select("weights").eq("kind", "dance").maybeSingle();
+  const w = (data?.weights ?? {}) as Partial<typeof DANCE_WEIGHTS_FALLBACK>;
+  return {
+    timing: w.timing ?? DANCE_WEIGHTS_FALLBACK.timing,
+    accuracy: w.accuracy ?? DANCE_WEIGHTS_FALLBACK.accuracy,
+    energy: w.energy ?? DANCE_WEIGHTS_FALLBACK.energy,
+    posture: w.posture ?? DANCE_WEIGHTS_FALLBACK.posture,
+  };
+}
 
 function VideoDetail() {
   const { id } = Route.useParams();
@@ -36,6 +50,7 @@ function VideoDetail() {
   const navigate = useNavigate();
   const analyzeFn = useServerFn(analyzeDance);
   const evaluateFn = useServerFn(evaluateDance);
+  const trainFn = useServerFn(submitDanceTraining);
 
   const { data: video, isLoading } = useQuery({
     queryKey: ["video", id],
@@ -68,6 +83,7 @@ function VideoDetail() {
   });
 
   const [aiSteps, setAiSteps] = useState<AiStep[]>([]);
+  const [features, setFeatures] = useState<DanceFeatures | null>(null);
   const setStep = (key: string, state: "active" | "done" | "error", label: string) =>
     setAiSteps((prev) => {
       const idx = prev.findIndex((s) => s.key === key);
@@ -80,15 +96,19 @@ function VideoDetail() {
     mutationFn: async () => {
       if (!signedUrl) throw new Error("Video not ready");
       setAiSteps([]);
-      setStep("frames", "active", "Extracting 12 frames from your video");
+      setStep("frames", "active", "Extracting 12 frames");
       const frames = await extractFramesFromUrl(signedUrl, 12);
       setStep("frames", "done", `Extracted ${frames.length} frames`);
-      setStep("upload", "active", "Sending frames to AI vision model");
-      setStep("model", "active", "AI is watching your dance");
-      const res = await analyzeFn({ data: { videoId: id, frames } });
-      setStep("upload", "done", "Frames delivered");
-      setStep("model", "done", "AI generated your lesson");
-      setStep("save", "done", "Saved to your library");
+      setStep("features", "active", "Computing motion + edge features");
+      const feats = await computeDanceFeatures(frames);
+      setFeatures(feats);
+      setStep("features", "done", "Features extracted");
+      setStep("model", "active", "Building your lesson from the signals");
+      const analysis = summarizeDance(feats);
+      setStep("model", "done", "Lesson ready");
+      setStep("save", "active", "Saving");
+      const res = await analyzeFn({ data: { videoId: id, analysis } });
+      setStep("save", "done", "Saved");
       return res;
     },
     onSuccess: () => { toast.success("Analysis complete"); qc.invalidateQueries({ queryKey: ["video", id] }); },
@@ -130,24 +150,30 @@ function VideoDetail() {
       {video.type === "source" && (
         <Card className="glass border-border/50">
           <CardHeader className="flex-row items-center justify-between space-y-0">
-            <CardTitle className="font-display flex items-center gap-2"><Sparkles className="h-4 w-4 text-primary" /> AI lesson</CardTitle>
-            <Button
-              onClick={() => analyzeMut.mutate()}
-              disabled={analyzeMut.isPending || video.status === "processing" || !signedUrl}
-              size="sm"
-              className="glow-primary"
-            >
-              {analyzeMut.isPending || video.status === "processing"
+            <CardTitle className="font-display flex items-center gap-2"><Sparkles className="h-4 w-4 text-primary" /> Lesson</CardTitle>
+            <Button onClick={() => analyzeMut.mutate()}
+              disabled={analyzeMut.isPending || !signedUrl}
+              size="sm" className="glow-primary">
+              {analyzeMut.isPending
                 ? <><Loader2 className="mr-2 h-3 w-3 animate-spin" />Analyzing</>
-                : analysis ? "Re-analyze" : "Analyze with AI"}
+                : analysis ? "Re-analyze" : "Analyze"}
             </Button>
           </CardHeader>
           <CardContent className="space-y-4">
             {aiSteps.length > 0 && (analyzeMut.isPending || aiSteps.some((s) => s.state === "error")) && (
-              <AiProgress steps={aiSteps} />
+              <AlgoProgress steps={aiSteps} />
             )}
             {analysis ? <AnalysisView a={analysis} /> : !analyzeMut.isPending && (
-              <p className="text-sm text-muted-foreground">Run AI analysis to generate a step-by-step lesson from your video.</p>
+              <p className="text-sm text-muted-foreground">Run analysis to generate a step-by-step lesson from your video.</p>
+            )}
+            {features && analysis && (
+              <TrainSection kind="dance" features={features} defaults={{
+                style: analysis.style, difficulty: analysis.difficulty,
+                timing: 75, accuracy: 75, energy: 75, posture: 75,
+              }} submit={async (payload) => {
+                const r = await trainFn({ data: payload });
+                return r;
+              }} />
             )}
           </CardContent>
         </Card>
@@ -184,22 +210,23 @@ function VideoDetail() {
           evaluate={async () => {
             if (!signedUrl) throw new Error("Practice video not ready");
             if (!video.reference_video_id) throw new Error("No reference video linked");
+            const refPath = await getRefPath(video.reference_video_id);
             const { data: refData } = await supabase.storage
-              .from("dance-videos").createSignedUrl(await getRefPath(video.reference_video_id), 3600);
+              .from("dance-videos").createSignedUrl(refPath, 3600);
             if (!refData?.signedUrl) throw new Error("Reference not accessible");
-            toast.message("Extracting 10 practice + 10 reference frames…");
+            toast.message("Extracting frames + computing features…");
             const [practiceFrames, referenceFrames] = await Promise.all([
-              extractFramesFromUrl(signedUrl, 10),
-              extractFramesFromUrl(refData.signedUrl, 10),
+              extractFramesFromUrl(signedUrl, 12),
+              extractFramesFromUrl(refData.signedUrl, 12),
             ]);
-            toast.message("Scoring your performance…");
+            const [pFeat, rFeat] = await Promise.all([
+              computeDanceFeatures(practiceFrames),
+              computeDanceFeatures(referenceFrames),
+            ]);
+            const weights = await loadDanceWeights();
+            const evaluation = scoreDance(pFeat, rFeat, weights);
             const res = await evaluateFn({
-              data: {
-                practiceVideoId: video.id,
-                referenceVideoId: video.reference_video_id,
-                practiceFrames,
-                referenceFrames,
-              },
+              data: { practiceVideoId: video.id, referenceVideoId: video.reference_video_id, evaluation },
             });
             qc.invalidateQueries({ queryKey: ["video", id] });
             return res;
@@ -219,7 +246,7 @@ async function getRefPath(refId: string): Promise<string> {
 }
 
 type Analysis = {
-  style: string; difficulty: string; tempo: string; summary: string;
+  style: string; difficulty: "beginner" | "intermediate" | "advanced"; tempo: string; summary: string;
   steps: { name: string; description: string; tip: string }[];
   keyMoves: string[]; practiceTips: string[];
 };
@@ -229,21 +256,21 @@ type Evaluation = {
   strengths: string[]; improvements: string[]; summary: string;
 };
 
-function AiProgress({ steps }: { steps: AiStep[] }) {
+function AlgoProgress({ steps }: { steps: AiStep[] }) {
   const done = steps.filter((s) => s.state === "done").length;
   const total = Math.max(steps.length, 4);
   return (
     <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4">
       <div className="mb-3 flex items-center justify-between">
         <p className="flex items-center gap-2 text-sm font-medium">
-          <Brain className="h-4 w-4 animate-pulse text-primary" /> AI is working…
+          <Brain className="h-4 w-4 animate-pulse text-primary" /> Algorithm running…
         </p>
         <span className="text-xs text-muted-foreground">{done}/{total}</span>
       </div>
       <Progress value={(done / total) * 100} className="mb-3 h-1.5" />
       <ol className="space-y-1.5 text-sm">
         {steps.map((s) => {
-          const Icon = s.key === "frames" ? Scissors : s.key === "upload" ? UploadCloud : s.key === "model" ? ScanLine : CheckCircle2;
+          const Icon = s.key === "frames" ? Scissors : s.key === "features" ? ScanLine : s.key === "model" ? Brain : CheckCircle2;
           return (
             <li key={s.key} className="flex items-center gap-2">
               {s.state === "active" ? <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" /> :
@@ -284,7 +311,6 @@ function AnalysisView({ a }: { a: Analysis }) {
         </div>
       </div>
       <p className="text-sm">{a.summary}</p>
-
       <div>
         <h3 className="mb-2 font-display text-sm font-semibold">Steps</h3>
         <ol className="space-y-2">
@@ -297,21 +323,90 @@ function AnalysisView({ a }: { a: Analysis }) {
           ))}
         </ol>
       </div>
-
       {a.keyMoves?.length > 0 && (
         <div>
           <h3 className="mb-1 font-display text-sm font-semibold">Key moves</h3>
-          <ul className="list-disc pl-5 text-sm text-muted-foreground">
-            {a.keyMoves.map((m, i) => <li key={i}>{m}</li>)}
-          </ul>
+          <ul className="list-disc pl-5 text-sm text-muted-foreground">{a.keyMoves.map((m, i) => <li key={i}>{m}</li>)}</ul>
         </div>
       )}
       {a.practiceTips?.length > 0 && (
         <div>
           <h3 className="mb-1 font-display text-sm font-semibold">Practice tips</h3>
-          <ul className="list-disc pl-5 text-sm text-muted-foreground">
-            {a.practiceTips.map((m, i) => <li key={i}>{m}</li>)}
-          </ul>
+          <ul className="list-disc pl-5 text-sm text-muted-foreground">{a.practiceTips.map((m, i) => <li key={i}>{m}</li>)}</ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TrainSection({
+  features, defaults, submit,
+}: {
+  kind: "dance"; features: DanceFeatures;
+  defaults: { style: string; difficulty: "beginner"|"intermediate"|"advanced"; timing: number; accuracy: number; energy: number; posture: number };
+  submit: (p: { features: Record<string, unknown>; labels: any; effort: number }) => Promise<{ accepted: boolean; awarded: number; rejection: string[] }>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [style, setStyle] = useState(defaults.style);
+  const [difficulty, setDifficulty] = useState(defaults.difficulty);
+  const [scores, setScores] = useState({ timing: defaults.timing, accuracy: defaults.accuracy, energy: defaults.energy, posture: defaults.posture });
+  const [effort, setEffort] = useState(5);
+  const [busy, setBusy] = useState(false);
+
+  const doSubmit = async () => {
+    setBusy(true);
+    try {
+      const r = await submit({
+        features: features as unknown as Record<string, unknown>,
+        labels: { style, difficulty, ...scores },
+        effort,
+      });
+      if (r.accepted) toast.success(`Training accepted — +${r.awarded} credits`);
+      else toast.error(`Rejected: ${r.rejection.join("; ")}`);
+      setOpen(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Training failed");
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-semibold flex items-center gap-1"><GraduationCap className="h-4 w-4 text-primary" />Train the algorithm</p>
+        <Button size="sm" variant="ghost" onClick={() => setOpen((v) => !v)}>{open ? "Cancel" : "Rate this"}</Button>
+      </div>
+      {open && (
+        <div className="mt-3 space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label className="text-xs">Style</Label>
+              <Input value={style} onChange={(e) => setStyle(e.target.value)} />
+            </div>
+            <div>
+              <Label className="text-xs">Difficulty</Label>
+              <select className="glass w-full rounded-md border border-border/50 bg-transparent px-2 py-1 text-sm"
+                value={difficulty} onChange={(e) => setDifficulty(e.target.value as any)}>
+                <option value="beginner">beginner</option>
+                <option value="intermediate">intermediate</option>
+                <option value="advanced">advanced</option>
+              </select>
+            </div>
+          </div>
+          {(["timing","accuracy","energy","posture"] as const).map((k) => (
+            <div key={k}>
+              <div className="flex justify-between text-xs"><span className="capitalize">{k}</span><span className="tabular-nums">{scores[k]}</span></div>
+              <Slider min={0} max={100} step={1} value={[scores[k]]}
+                onValueChange={(v) => setScores((prev) => ({ ...prev, [k]: v[0] }))} />
+            </div>
+          ))}
+          <div>
+            <div className="flex justify-between text-xs"><span>Effort (1–10)</span><span className="tabular-nums">{effort}</span></div>
+            <Slider min={1} max={10} step={1} value={[effort]} onValueChange={(v) => setEffort(v[0])} />
+          </div>
+          <p className="text-xs text-muted-foreground">You earn up to {effort * 2} credits if accepted. Bad or duplicate trains are filtered.</p>
+          <Button size="sm" onClick={doSubmit} disabled={busy} className="w-full glow-primary">
+            {busy ? <><Loader2 className="mr-2 h-3 w-3 animate-spin" />Submitting</> : "Submit training"}
+          </Button>
         </div>
       )}
     </div>
@@ -319,7 +414,7 @@ function AnalysisView({ a }: { a: Analysis }) {
 }
 
 function PracticeEvaluation({
-  practice, evaluate, feedback, status,
+  evaluate, feedback, status,
 }: { practice: any; evaluate: () => Promise<any>; feedback: Evaluation | null; status: string }) {
   const mut = useMutation({
     mutationFn: evaluate,
@@ -330,12 +425,10 @@ function PracticeEvaluation({
     <Card className="glass border-border/50">
       <CardHeader className="flex-row items-center justify-between space-y-0">
         <CardTitle className="font-display flex items-center gap-2"><Trophy className="h-4 w-4 text-primary" /> Performance score</CardTitle>
-        <Button size="sm" className="glow-primary"
-          onClick={() => mut.mutate()}
-          disabled={mut.isPending || status === "processing"}>
+        <Button size="sm" className="glow-primary" onClick={() => mut.mutate()} disabled={mut.isPending || status === "processing"}>
           {mut.isPending || status === "processing"
             ? <><Loader2 className="mr-2 h-3 w-3 animate-spin" />Scoring</>
-            : feedback ? "Re-score" : "Score with AI"}
+            : feedback ? "Re-score" : "Score"}
         </Button>
       </CardHeader>
       <CardContent>
@@ -359,22 +452,18 @@ function PracticeEvaluation({
             {feedback.strengths?.length > 0 && (
               <div>
                 <h3 className="mb-1 font-display text-sm font-semibold text-primary">Strengths</h3>
-                <ul className="list-disc pl-5 text-sm text-muted-foreground">
-                  {feedback.strengths.map((s, i) => <li key={i}>{s}</li>)}
-                </ul>
+                <ul className="list-disc pl-5 text-sm text-muted-foreground">{feedback.strengths.map((s, i) => <li key={i}>{s}</li>)}</ul>
               </div>
             )}
             {feedback.improvements?.length > 0 && (
               <div>
                 <h3 className="mb-1 font-display text-sm font-semibold">Improve</h3>
-                <ul className="list-disc pl-5 text-sm text-muted-foreground">
-                  {feedback.improvements.map((s, i) => <li key={i}>{s}</li>)}
-                </ul>
+                <ul className="list-disc pl-5 text-sm text-muted-foreground">{feedback.improvements.map((s, i) => <li key={i}>{s}</li>)}</ul>
               </div>
             )}
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">Run AI scoring to compare your practice against the reference.</p>
+          <p className="text-sm text-muted-foreground">Run scoring to compare your practice against the reference.</p>
         )}
       </CardContent>
     </Card>
@@ -404,7 +493,7 @@ function PracticeUpload({ referenceId, onCreated }: { referenceId: string; onCre
     setBusy(true); setProgress(10);
     try {
       const path = `${user.id}/${Date.now()}-practice-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-      const tick = setInterval(() => setProgress((p) => Math.min(70, p + 5)), 300);
+      const tick = setInterval(() => setProgress((p) => Math.min(60, p + 5)), 300);
       const { error: upErr } = await supabase.storage.from("dance-videos").upload(path, file, {
         contentType: file.type, upsert: false,
       });
@@ -417,21 +506,23 @@ function PracticeUpload({ referenceId, onCreated }: { referenceId: string; onCre
         type: "practice", status: "uploaded", reference_video_id: referenceId,
       }).select("id").single();
       if (dbErr || !inserted) throw dbErr;
-      setProgress(80);
+      setProgress(70);
 
-      toast.success("Practice uploaded — scoring…");
-
-      // Extract frames + evaluate immediately
       try {
         const { data: refRow } = await supabase.from("videos").select("file_path").eq("id", referenceId).maybeSingle();
         const { data: refUrl } = await supabase.storage.from("dance-videos").createSignedUrl(refRow!.file_path, 3600);
-        const practiceFrames = await extractFramesFromFile(file, 10);
-        const referenceFrames = await extractFramesFromUrl(refUrl!.signedUrl, 10);
+        const [practiceFrames, referenceFrames] = await Promise.all([
+          extractFramesFromFile(file, 12),
+          extractFramesFromUrl(refUrl!.signedUrl, 12),
+        ]);
+        const [pFeat, rFeat] = await Promise.all([
+          computeDanceFeatures(practiceFrames),
+          computeDanceFeatures(referenceFrames),
+        ]);
+        const weights = await loadDanceWeights();
+        const evaluation = scoreDance(pFeat, rFeat, weights);
         await evaluateFn({
-          data: {
-            practiceVideoId: inserted.id, referenceVideoId: referenceId,
-            practiceFrames, referenceFrames,
-          },
+          data: { practiceVideoId: inserted.id, referenceVideoId: referenceId, evaluation },
         });
       } catch (e: any) {
         toast.error(e.message ?? "Scoring failed — you can retry on the practice page");
