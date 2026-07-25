@@ -16,7 +16,7 @@ const AnalysisPayload = z.object({
   practiceTips: z.array(z.string()),
   _algo: z.string(),
   _features: z.any().optional(),
-}).passthrough();
+});
 
 const EvaluationPayload = z.object({
   scores: z.object({
@@ -27,7 +27,9 @@ const EvaluationPayload = z.object({
   improvements: z.array(z.string()),
   summary: z.string(),
   _algo: z.string(),
-}).passthrough();
+});
+
+type Json = Record<string, unknown>;
 
 export const analyzeDance = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
